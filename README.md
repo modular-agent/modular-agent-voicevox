@@ -16,7 +16,7 @@ Two changes to add this package to [`modular-agent-desktop`](https://github.com/
 1. **`modular-agent-desktop/src-tauri/Cargo.toml`** — add dependency:
 
    ```toml
-   modular-agent-voicevox = { path = "../../modular-agent-voicevox" }
+   modular-agent-voicevox = { git = "https://github.com/modular-agent/modular-agent-voicevox", tag = "v0.1.0" }
    ```
 
 2. **`modular-agent-desktop/src-tauri/src/lib.rs`** — add import:
