@@ -259,12 +259,12 @@ fn concatenate_wavs(wavs: &[Vec<u8>]) -> Result<Vec<u8>, AgentError> {
     inputs = [PORT_TEXT],
     outputs = [PORT_AUDIO],
     integer_config(name = CONFIG_SPEAKER, default = 0, description = "Speaker ID (use VoiceVox Speakers agent to list available IDs)"),
-    number_config(name = CONFIG_SPEED, default = 1.0, description = "Speech speed multiplier (1.0 = normal)"),
-    number_config(name = CONFIG_PITCH, default = 0.0, description = "Pitch adjustment (0.0 = normal)"),
-    number_config(name = CONFIG_VOLUME, default = 1.0, description = "Volume multiplier (1.0 = normal)"),
-    object_config(name = CONFIG_EMOTION_MAP, title = "Emotion Map", description = "Pattern to parameter overrides. Keys are literal strings matched in text. Wrap in / for regex. e.g. {\"((happy))\": {\"speaker\": 1, \"pitch\": 0.1}}"),
+    number_config(name = CONFIG_SPEED, default = 1.0, detail, description = "Speech speed multiplier (1.0 = normal)"),
+    number_config(name = CONFIG_PITCH, default = 0.0, detail, description = "Pitch adjustment (0.0 = normal)"),
+    number_config(name = CONFIG_VOLUME, default = 1.0, detail, description = "Volume multiplier (1.0 = normal)"),
+    object_config(name = CONFIG_EMOTION_MAP, title = "Emotion Map", detail, description = "Pattern to parameter overrides. Keys are literal strings matched in text. Wrap in / for regex. e.g. {\"((happy))\": {\"speaker\": 1, \"pitch\": 0.1}}"),
     custom_global_config(name = CONFIG_URL, type_ = "string", default = AgentValue::string(DEFAULT_URL), title = "VoiceVox URL"),
-    hint(width = 1, height = 2),
+    hint(width = 1, height = 1),
 )]
 struct VoiceVoxTtsAgent {
     data: AgentData,
