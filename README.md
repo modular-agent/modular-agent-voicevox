@@ -16,7 +16,7 @@ Two changes to add this package to [`modular-agent-desktop`](https://github.com/
 1. **`modular-agent-desktop/src-tauri/Cargo.toml`** — add dependency:
 
    ```toml
-   modular-agent-voicevox = { git = "https://github.com/modular-agent/modular-agent-voicevox", tag = "v0.1.0" }
+   modular-agent-voicevox = { git = "https://github.com/modular-agent/modular-agent-voicevox", tag = "v0.2.0" }
    ```
 
 2. **`modular-agent-desktop/src-tauri/src/lib.rs`** — add import:
@@ -43,6 +43,7 @@ Two changes to add this package to [`modular-agent-desktop`](https://github.com/
 | speed | number | 1.0 | Speech speed multiplier (1.0 = normal) |
 | pitch | number | 0.0 | Pitch adjustment (0.0 = normal) |
 | volume | number | 1.0 | Volume multiplier (1.0 = normal) |
+| emotion_map | object | {} | Pattern to parameter overrides for emotion tags (see [Emotion Tags](#emotion-tags)) |
 
 ### Global Configuration
 
@@ -70,6 +71,32 @@ Two-step process against the VoiceVox Engine:
 
 Speed, pitch, and volume configs are applied to the AudioQuery between steps 1 and 2.
 
+### Emotion Tags
+
+Input text may contain emotion tags like `((happy))Hello`. When `emotion_map` is configured, the agent parses these tags, splits text into segments, synthesizes each with per-emotion parameters, and concatenates the WAV output into a single data URI.
+
+#### emotion_map format
+
+Keys are literal strings matched in input text. Values are objects that override `speaker`, `speed`, `pitch`, and/or `volume` for that emotion. Unspecified parameters fall back to the agent's default config.
+
+```json
+{
+  "((happy))": { "speaker": 1, "speed": 1.2, "pitch": 0.1 },
+  "((sad))": { "speaker": 2, "pitch": -0.2 },
+  "((angry))": { "speaker": 3, "speed": 1.1, "volume": 1.3 }
+}
+```
+
+Keys wrapped in `/` are treated as raw regex patterns. For example, to strip all `((...))` tags with default parameters:
+
+```json
+{
+  "/\\(\\(\\w+\\)\\)/": {}
+}
+```
+
+When `emotion_map` is empty (default), emotion parsing is disabled and the agent behaves as a standard TTS.
+
 ## VoiceVox Speakers
 
 ### Configuration
@@ -83,7 +110,13 @@ No configuration required. Uses the shared global VoiceVox URL config from Voice
 
 ## Architecture
 
-Both agents share the VoiceVox Engine URL via a `custom_global_config` on the VoiceVox TTS agent, accessed through a `get_url()` helper. Each agent holds its own `reqwest::Client` for HTTP connection pooling.
+Both agents share the VoiceVox Engine URL via a `custom_global_config` on the VoiceVox TTS agent, accessed through a `get_url()` helper. Each agent holds its own `reqwest::Client` for HTTP connection pooling. When emotion tags produce multiple segments, each is synthesized independently and the resulting WAV files are concatenated by parsing RIFF headers and merging PCM data.
+
+## Key Dependencies
+
+- [reqwest](https://crates.io/crates/reqwest) — HTTP client for VoiceVox Engine API
+- [base64](https://crates.io/crates/base64) — WAV binary to data URI encoding
+- [regex](https://crates.io/crates/regex) — Emotion tag pattern matching
 
 ## License
 
