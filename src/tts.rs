@@ -420,7 +420,7 @@ impl AsAgent for VoiceVoxTtsAgent {
         let text = value
             .as_str()
             .map(str::to_string)
-            .or_else(|| value.as_message().map(|m| m.content.clone()))
+            .or_else(|| value.as_message().map(|m| m.text()))
             .or_else(|| value.get_str("text").map(str::to_string))
             .ok_or_else(|| {
                 AgentError::InvalidValue("Input must be a string, message, or doc".into())

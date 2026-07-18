@@ -18,5 +18,5 @@ serde_json = "1"
 default = ["reqwest/default-tls"]
 rustls = ["reqwest/rustls"]
 
-# [patch.crates-io]
-# modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
+[patch.crates-io]
+modular-agent-core = { path = "../modular-agent-core/modular-agent-core" }
