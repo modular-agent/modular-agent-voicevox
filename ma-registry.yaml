@@ -1,0 +1,8 @@
+name: modular-agent-voicevox
+description: VOICEVOX text-to-speech agents
+available_features:
+  - default-tls
+  - rustls
+default_features:
+  - rustls
+default_for: [desktop]
