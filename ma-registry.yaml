@@ -1,5 +1,5 @@
 name: modular-agent-voicevox
-description: VOICEVOX text-to-speech agents
+description: VOICEVOX text-to-speech modules
 available_features:
   - default-tls
   - rustls

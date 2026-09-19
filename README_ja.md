@@ -1,6 +1,6 @@
-# VoiceVox TTS Agents for Modular Agent
+# VoiceVox TTS Modules for Modular Agent
 
-[VoiceVox Engine](https://github.com/VOICEVOX/voicevox_engine) を使った音声合成エージェント。VoiceVox Engine がローカルで起動している必要があります。
+[VoiceVox Engine](https://github.com/VOICEVOX/voicevox_engine) を使った音声合成モジュール。VoiceVox Engine がローカルで起動している必要があります。
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -39,7 +39,7 @@
 
 | Config | 型 | デフォルト | 説明 |
 | ------ | -- | ---------- | ---- |
-| speaker | integer | 0 | 話者 ID (VoiceVox Speakers エージェントで利用可能な ID を確認) |
+| speaker | integer | 0 | 話者 ID (VoiceVox Speakers モジュールで利用可能な ID を確認) |
 | speed | number | 1.0 | 話速の倍率 (1.0 = 通常) |
 | pitch | number | 0.0 | ピッチ調整 (0.0 = 通常) |
 | volume | number | 1.0 | 音量の倍率 (1.0 = 通常) |
@@ -48,7 +48,7 @@
 
 | Config | 型 | デフォルト | 説明 |
 | ------ | -- | ---------- | ---- |
-| url | string | `http://localhost:50021` | VoiceVox Engine の URL (全 VoiceVox エージェントで共有)。[AivisSpeech](https://aivis-project.com/#products-aivisspeech) を使う場合は `http://localhost:10101` に変更 (AivisSpeech の設定に合わせてください) |
+| url | string | `http://localhost:50021` | VoiceVox Engine の URL (全 VoiceVox モジュールで共有)。[AivisSpeech](https://aivis-project.com/#products-aivisspeech) を使う場合は `http://localhost:10101` に変更 (AivisSpeech の設定に合わせてください) |
 
 ### ポート
 
@@ -59,7 +59,7 @@
 
 WAV バイナリを data URI 文字列としてエンコード: `data:audio/wav;base64,...`
 
-Audio Player エージェントと組み合わせて再生できます。
+Audio Player モジュールと組み合わせて再生できます。
 
 ### API フロー
 
@@ -83,7 +83,7 @@ speed、pitch、volume の設定はステップ 1 と 2 の間で AudioQuery に
 
 ## アーキテクチャ
 
-両エージェントは VoiceVox TTS エージェントの `custom_global_config` を通じて VoiceVox Engine の URL を共有し、`get_url()` ヘルパーでアクセスします。各エージェントは HTTP コネクションプーリングのために独自の `reqwest::Client` を保持しています。
+両モジュールは VoiceVox TTS モジュールの `custom_global_config` を通じて VoiceVox Engine の URL を共有し、`get_url()` ヘルパーでアクセスします。各モジュールは HTTP コネクションプーリングのために独自の `reqwest::Client` を保持しています。
 
 ## ライセンス
 

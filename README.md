@@ -1,6 +1,6 @@
-# VoiceVox TTS Agents for Modular Agent
+# VoiceVox TTS Modules for Modular Agent
 
-Text-to-speech agents using [VoiceVox Engine](https://github.com/VOICEVOX/voicevox_engine). Requires VoiceVox Engine running locally.
+Text-to-speech modules using [VoiceVox Engine](https://github.com/VOICEVOX/voicevox_engine). Requires VoiceVox Engine running locally.
 
 [English](README.md) | [日本語](README_ja.md)
 
@@ -39,7 +39,7 @@ Two changes to add this package to [`modular-agent-desktop`](https://github.com/
 
 | Config | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
-| speaker | integer | 0 | Speaker ID (use VoiceVox Speakers agent to list available IDs) |
+| speaker | integer | 0 | Speaker ID (use VoiceVox Speakers module to list available IDs) |
 | speed | number | 1.0 | Speech speed multiplier (1.0 = normal) |
 | pitch | number | 0.0 | Pitch adjustment (0.0 = normal) |
 | volume | number | 1.0 | Volume multiplier (1.0 = normal) |
@@ -49,7 +49,7 @@ Two changes to add this package to [`modular-agent-desktop`](https://github.com/
 
 | Config | Type | Default | Description |
 | ------ | ---- | ------- | ----------- |
-| url | string | `http://localhost:50021` | VoiceVox Engine URL (shared across all VoiceVox agents). For [AivisSpeech](https://aivis-project.com/#products-aivisspeech), use `http://localhost:10101` (adjust to match your AivisSpeech settings) |
+| url | string | `http://localhost:50021` | VoiceVox Engine URL (shared across all VoiceVox modules). For [AivisSpeech](https://aivis-project.com/#products-aivisspeech), use `http://localhost:10101` (adjust to match your AivisSpeech settings) |
 
 ### Ports
 
@@ -60,7 +60,7 @@ Two changes to add this package to [`modular-agent-desktop`](https://github.com/
 
 WAV binary encoded as a data URI string: `data:audio/wav;base64,...`
 
-Compatible with the Audio Player agent for playback.
+Compatible with the Audio Player module for playback.
 
 ### API Flow
 
@@ -73,11 +73,11 @@ Speed, pitch, and volume configs are applied to the AudioQuery between steps 1 a
 
 ### Emotion Tags
 
-Input text may contain emotion tags like `((happy))Hello`. When `emotion_map` is configured, the agent parses these tags, splits text into segments, synthesizes each with per-emotion parameters, and concatenates the WAV output into a single data URI.
+Input text may contain emotion tags like `((happy))Hello`. When `emotion_map` is configured, the module parses these tags, splits text into segments, synthesizes each with per-emotion parameters, and concatenates the WAV output into a single data URI.
 
 #### emotion_map format
 
-Keys are literal strings matched in input text. Values are objects that override `speaker`, `speed`, `pitch`, and/or `volume` for that emotion. Unspecified parameters fall back to the agent's default config.
+Keys are literal strings matched in input text. Values are objects that override `speaker`, `speed`, `pitch`, and/or `volume` for that emotion. Unspecified parameters fall back to the module's default config.
 
 ```json
 {
@@ -95,7 +95,7 @@ Keys wrapped in `/` are treated as raw regex patterns. For example, to strip all
 }
 ```
 
-When `emotion_map` is empty (default), emotion parsing is disabled and the agent behaves as a standard TTS.
+When `emotion_map` is empty (default), emotion parsing is disabled and the module behaves as a standard TTS.
 
 ## VoiceVox Speakers
 
@@ -110,7 +110,7 @@ No configuration required. Uses the shared global VoiceVox URL config from Voice
 
 ## Architecture
 
-Both agents share the VoiceVox Engine URL via a `custom_global_config` on the VoiceVox TTS agent, accessed through a `get_url()` helper. Each agent holds its own `reqwest::Client` for HTTP connection pooling. When emotion tags produce multiple segments, each is synthesized independently and the resulting WAV files are concatenated by parsing RIFF headers and merging PCM data.
+Both modules share the VoiceVox Engine URL via a `custom_global_config` on the VoiceVox TTS module, accessed through a `get_url()` helper. Each module holds its own `reqwest::Client` for HTTP connection pooling. When emotion tags produce multiple segments, each is synthesized independently and the resulting WAV files are concatenated by parsing RIFF headers and merging PCM data.
 
 ## Key Dependencies
 

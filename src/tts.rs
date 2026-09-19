@@ -1,7 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD};
 use modular_agent_core::{
-    Agent, AgentContext, AgentData, AgentError, AgentOutput, AgentSpec, AgentValue, AsAgent,
-    ModularAgent, async_trait, modular_agent,
+    AsModule, Error, ModularAgent, Module, ModuleContext, ModuleData, ModuleOutput, ModuleSpec,
+    Result, Value, async_trait, modular_agent,
 };
 use regex::Regex;
 use reqwest::Client;
@@ -23,7 +23,7 @@ const CONFIG_EMOTION_MAP: &str = "emotion_map";
 const DEFAULT_URL: &str = "http://localhost:50021";
 
 fn get_url(ma: &ModularAgent) -> String {
-    ma.get_global_configs(VoiceVoxTtsAgent::DEF_NAME)
+    ma.get_global_configs(VoiceVoxTtsModule::DEF_NAME)
         .and_then(|cfg| cfg.get_string(CONFIG_URL).ok())
         .filter(|url| !url.is_empty())
         .unwrap_or_else(|| DEFAULT_URL.to_string())
@@ -44,7 +44,7 @@ struct EmotionSegment {
 
 impl EmotionMatcher {
     /// Build from emotion_map keys. Returns None if no valid patterns.
-    fn build(raw_keys: &[String]) -> Result<Option<Self>, AgentError> {
+    fn build(raw_keys: &[String]) -> Result<Option<Self>> {
         let mut patterns: Vec<(String, String)> = Vec::new(); // (original_key, regex_pattern)
 
         for key in raw_keys {
@@ -85,9 +85,8 @@ impl EmotionMatcher {
         }
 
         let combined = regex_parts.join("|");
-        let regex = Regex::new(&combined).map_err(|e| {
-            AgentError::InvalidConfig(format!("Invalid emotion_map pattern: {}", e))
-        })?;
+        let regex = Regex::new(&combined)
+            .map_err(|e| Error::InvalidConfig(format!("Invalid emotion_map pattern: {}", e)))?;
 
         Ok(Some(EmotionMatcher { regex, keys }))
     }
@@ -145,13 +144,13 @@ impl EmotionMatcher {
 
 /// Find the offset and size of the "data" chunk in a WAV/RIFF file.
 /// Returns (data_offset, data_size) where data_offset is the start of PCM data.
-fn find_wav_data_chunk(wav: &[u8]) -> Result<(usize, u32), AgentError> {
+fn find_wav_data_chunk(wav: &[u8]) -> Result<(usize, u32)> {
     if wav.len() < 12 {
-        return Err(AgentError::IoError("WAV data too short".into()));
+        return Err(Error::IoError("WAV data too short".into()));
     }
     // Verify RIFF header
     if &wav[0..4] != b"RIFF" || &wav[8..12] != b"WAVE" {
-        return Err(AgentError::IoError("Invalid WAV header".into()));
+        return Err(Error::IoError("Invalid WAV header".into()));
     }
     // Scan for "data" chunk after the initial 12-byte RIFF header
     let mut pos = 12;
@@ -171,15 +170,13 @@ fn find_wav_data_chunk(wav: &[u8]) -> Result<(usize, u32), AgentError> {
         };
         pos += advance;
     }
-    Err(AgentError::IoError("WAV data chunk not found".into()))
+    Err(Error::IoError("WAV data chunk not found".into()))
 }
 
 /// Extract sample rate (4 bytes at offset 24) and number of channels (2 bytes at offset 22)
-fn wav_format_info(wav: &[u8]) -> Result<(u32, u16), AgentError> {
+fn wav_format_info(wav: &[u8]) -> Result<(u32, u16)> {
     if wav.len() < 26 {
-        return Err(AgentError::IoError(
-            "WAV data too short for format info".into(),
-        ));
+        return Err(Error::IoError("WAV data too short for format info".into()));
     }
     let channels = u16::from_le_bytes([wav[22], wav[23]]);
     let sample_rate = u32::from_le_bytes([wav[24], wav[25], wav[26], wav[27]]);
@@ -188,9 +185,9 @@ fn wav_format_info(wav: &[u8]) -> Result<(u32, u16), AgentError> {
 
 /// Concatenate multiple WAV files into one.
 /// All WAVs must have the same sample rate and channel count.
-fn concatenate_wavs(wavs: &[Vec<u8>]) -> Result<Vec<u8>, AgentError> {
+fn concatenate_wavs(wavs: &[Vec<u8>]) -> Result<Vec<u8>> {
     if wavs.is_empty() {
-        return Err(AgentError::IoError("No WAV data to concatenate".into()));
+        return Err(Error::IoError("No WAV data to concatenate".into()));
     }
     if wavs.len() == 1 {
         return Ok(wavs[0].clone());
@@ -205,7 +202,7 @@ fn concatenate_wavs(wavs: &[Vec<u8>]) -> Result<Vec<u8>, AgentError> {
     for (i, wav) in wavs.iter().enumerate() {
         let (sample_rate, channels) = wav_format_info(wav)?;
         if sample_rate != ref_sample_rate || channels != ref_channels {
-            return Err(AgentError::IoError(format!(
+            return Err(Error::IoError(format!(
                 "WAV format mismatch at segment {}: expected {}Hz {}ch, got {}Hz {}ch",
                 i, ref_sample_rate, ref_channels, sample_rate, channels
             )));
@@ -249,7 +246,7 @@ fn concatenate_wavs(wavs: &[Vec<u8>]) -> Result<Vec<u8>, AgentError> {
     Ok(output)
 }
 
-// --- Agent implementation ---
+// --- Module implementation ---
 
 /// Synthesize speech from text using VoiceVox engine.
 /// Supports emotion tags in text (e.g. `((happy))Hello`) when emotion_map is configured.
@@ -258,22 +255,22 @@ fn concatenate_wavs(wavs: &[Vec<u8>]) -> Result<Vec<u8>, AgentError> {
     category = CATEGORY,
     inputs = [PORT_TEXT],
     outputs = [PORT_AUDIO],
-    integer_config(name = CONFIG_SPEAKER, default = 0, description = "Speaker ID (use VoiceVox Speakers agent to list available IDs)"),
+    integer_config(name = CONFIG_SPEAKER, default = 0, description = "Speaker ID (use VoiceVox Speakers module to list available IDs)"),
     number_config(name = CONFIG_SPEED, default = 1.0, detail, description = "Speech speed multiplier (1.0 = normal)"),
     number_config(name = CONFIG_PITCH, default = 0.0, detail, description = "Pitch adjustment (0.0 = normal)"),
     number_config(name = CONFIG_VOLUME, default = 1.0, detail, description = "Volume multiplier (1.0 = normal)"),
     object_config(name = CONFIG_EMOTION_MAP, title = "Emotion Map", detail, description = "Pattern to parameter overrides. Keys are literal strings matched in text. Wrap in / for regex. e.g. {\"((happy))\": {\"speaker\": 1, \"pitch\": 0.1}}"),
-    custom_global_config(name = CONFIG_URL, type_ = "string", default = AgentValue::string(DEFAULT_URL), title = "VoiceVox URL"),
+    custom_global_config(name = CONFIG_URL, type_ = "string", default = Value::string(DEFAULT_URL), title = "VoiceVox URL"),
     hint(width = 1, height = 1),
 )]
-struct VoiceVoxTtsAgent {
-    data: AgentData,
+struct VoiceVoxTtsModule {
+    data: ModuleData,
     client: Client,
     cached_emotion_matcher: Option<EmotionMatcher>,
     emotion_cache_built: bool,
 }
 
-impl VoiceVoxTtsAgent {
+impl VoiceVoxTtsModule {
     /// Synthesize a single text segment into WAV bytes
     async fn synthesize_segment(
         &self,
@@ -283,7 +280,7 @@ impl VoiceVoxTtsAgent {
         speed: f64,
         pitch: f64,
         volume: f64,
-    ) -> Result<Vec<u8>, AgentError> {
+    ) -> Result<Vec<u8>> {
         let speaker_str = speaker.to_string();
 
         // Step 1: Create audio query
@@ -296,20 +293,20 @@ impl VoiceVoxTtsAgent {
             .await
             .map_err(|e| {
                 if e.is_connect() {
-                    AgentError::IoError(format!("VoiceVox engine is not running at {}: {}", url, e))
+                    Error::IoError(format!("VoiceVox engine is not running at {}: {}", url, e))
                 } else {
-                    AgentError::IoError(format!("audio_query request error: {}", e))
+                    Error::IoError(format!("audio_query request error: {}", e))
                 }
             })?;
 
         let resp = resp
             .error_for_status()
-            .map_err(|e| AgentError::IoError(format!("audio_query failed: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("audio_query failed: {}", e)))?;
 
         let mut audio_query: serde_json::Value = resp
             .json()
             .await
-            .map_err(|e| AgentError::IoError(format!("audio_query response parse error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("audio_query response parse error: {}", e)))?;
 
         // Adjust synthesis parameters
         audio_query["speedScale"] = serde_json::json!(speed);
@@ -325,22 +322,22 @@ impl VoiceVoxTtsAgent {
             .json(&audio_query)
             .send()
             .await
-            .map_err(|e| AgentError::IoError(format!("synthesis request error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("synthesis request error: {}", e)))?;
 
         let resp = resp
             .error_for_status()
-            .map_err(|e| AgentError::IoError(format!("synthesis failed: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("synthesis failed: {}", e)))?;
 
         let wav_bytes = resp
             .bytes()
             .await
-            .map_err(|e| AgentError::IoError(format!("synthesis response read error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("synthesis response read error: {}", e)))?;
 
         Ok(wav_bytes.to_vec())
     }
 
     /// Build or return cached EmotionMatcher from current emotion_map config
-    fn get_emotion_matcher(&mut self) -> Result<Option<&EmotionMatcher>, AgentError> {
+    fn get_emotion_matcher(&mut self) -> Result<Option<&EmotionMatcher>> {
         if !self.emotion_cache_built {
             let emotion_map = self.configs()?.get_object_or_default(CONFIG_EMOTION_MAP);
             if !emotion_map.is_empty() {
@@ -362,7 +359,7 @@ impl VoiceVoxTtsAgent {
         default_speed: f64,
         default_pitch: f64,
         default_volume: f64,
-    ) -> Result<(i64, f64, f64, f64), AgentError> {
+    ) -> Result<(i64, f64, f64, f64)> {
         let emotion_map = self.configs()?.get_object_or_default(CONFIG_EMOTION_MAP);
         if let Some(overrides) = emotion_map.get(key)
             && let Some(obj) = overrides.as_object()
@@ -395,39 +392,32 @@ impl VoiceVoxTtsAgent {
 }
 
 #[async_trait]
-impl AsAgent for VoiceVoxTtsAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for VoiceVoxTtsModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             client: Client::new(),
             cached_emotion_matcher: None,
             emotion_cache_built: false,
         })
     }
 
-    fn configs_changed(&mut self) -> Result<(), AgentError> {
+    fn configs_changed(&mut self) -> Result<()> {
         self.cached_emotion_matcher = None;
         self.emotion_cache_built = false;
         Ok(())
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, value: Value) -> Result<()> {
         let text = value
             .as_str()
             .map(str::to_string)
             .or_else(|| value.as_message().map(|m| m.text()))
             .or_else(|| value.get_str("text").map(str::to_string))
-            .ok_or_else(|| {
-                AgentError::InvalidValue("Input must be a string, message, or doc".into())
-            })?;
+            .ok_or_else(|| Error::InvalidValue("Input must be a string, message, or doc".into()))?;
 
         if text.is_empty() {
-            return Err(AgentError::InvalidValue("Input text is empty".to_string()));
+            return Err(Error::InvalidValue("Input text is empty".to_string()));
         }
 
         let url = get_url(self.ma());
@@ -454,9 +444,7 @@ impl AsAgent for VoiceVoxTtsAgent {
                 .await?;
             let b64 = STANDARD.encode(&wav);
             let data_uri = format!("data:audio/wav;base64,{}", b64);
-            return self
-                .output(ctx, PORT_AUDIO, AgentValue::string(data_uri))
-                .await;
+            return self.output(ctx, PORT_AUDIO, Value::string(data_uri)).await;
         }
 
         // Parse text into emotion segments
@@ -470,7 +458,7 @@ impl AsAgent for VoiceVoxTtsAgent {
             .collect();
 
         if segments.is_empty() {
-            return Err(AgentError::InvalidValue(
+            return Err(Error::InvalidValue(
                 "No text content after emotion tag parsing".to_string(),
             ));
         }
@@ -506,8 +494,7 @@ impl AsAgent for VoiceVoxTtsAgent {
         let b64 = STANDARD.encode(&combined);
         let data_uri = format!("data:audio/wav;base64,{}", b64);
 
-        self.output(ctx, PORT_AUDIO, AgentValue::string(data_uri))
-            .await
+        self.output(ctx, PORT_AUDIO, Value::string(data_uri)).await
     }
 }
 
@@ -518,47 +505,42 @@ impl AsAgent for VoiceVoxTtsAgent {
     inputs = [PORT_UNIT],
     outputs = [PORT_SPEAKERS],
 )]
-struct VoiceVoxSpeakersAgent {
-    data: AgentData,
+struct VoiceVoxSpeakersModule {
+    data: ModuleData,
     client: Client,
 }
 
 #[async_trait]
-impl AsAgent for VoiceVoxSpeakersAgent {
-    fn new(ma: ModularAgent, id: String, spec: AgentSpec) -> Result<Self, AgentError> {
+impl AsModule for VoiceVoxSpeakersModule {
+    fn new(ma: ModularAgent, id: String, spec: ModuleSpec) -> Result<Self> {
         Ok(Self {
-            data: AgentData::new(ma, id, spec),
+            data: ModuleData::new(ma, id, spec),
             client: Client::new(),
         })
     }
 
-    async fn process(
-        &mut self,
-        ctx: AgentContext,
-        _port: String,
-        _value: AgentValue,
-    ) -> Result<(), AgentError> {
+    async fn process(&mut self, ctx: ModuleContext, _port: String, _value: Value) -> Result<()> {
         let url = get_url(self.ma());
         let speakers_url = format!("{}/speakers", url);
 
         let resp = self.client.get(&speakers_url).send().await.map_err(|e| {
             if e.is_connect() {
-                AgentError::IoError(format!("VoiceVox engine is not running at {}: {}", url, e))
+                Error::IoError(format!("VoiceVox engine is not running at {}: {}", url, e))
             } else {
-                AgentError::IoError(format!("speakers request error: {}", e))
+                Error::IoError(format!("speakers request error: {}", e))
             }
         })?;
 
         let resp = resp
             .error_for_status()
-            .map_err(|e| AgentError::IoError(format!("speakers request failed: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("speakers request failed: {}", e)))?;
 
         let speakers: serde_json::Value = resp
             .json()
             .await
-            .map_err(|e| AgentError::IoError(format!("speakers response parse error: {}", e)))?;
+            .map_err(|e| Error::IoError(format!("speakers response parse error: {}", e)))?;
 
-        let speakers = AgentValue::from_serialize(&speakers)?;
+        let speakers = Value::from_serialize(&speakers)?;
         self.output(ctx, PORT_SPEAKERS, speakers).await
     }
 }
