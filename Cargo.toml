@@ -7,7 +7,7 @@ edition = "2024"
 license = "Apache-2.0 OR MIT"
 
 [dependencies]
-base64 = "0.22.1"
+base64 = "0.23"
 modular-agent-core = { path = "../../crates/modular-agent-core" }
 regex = "1"
 reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
